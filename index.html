@@ -3,149 +3,426 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Voice Switch Check (No Audio Saved)</title>
+  <title>AI Voice Trainer（No Audio Saved）</title>
+
   <style>
+    /* =========================================================
+      AI Voice Trainer - UI Only Refresh
+      - 既存の録音/解析/波形/指標計算ロジックは変更しない
+      - UI/表示/スコア算出/ドリル/再録音体験を追加
+    ========================================================= */
+
     :root{
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
-      color-scheme: light;
-    }
-    body{ margin:0; background:#f6f7f9; color:#111; }
-    header{ padding:18px 20px 10px; max-width:1200px; margin:0 auto; }
-    h1{ margin:0; font-size:18px; }
-    .note{ margin:8px 0 0; font-size:12px; color:#555; line-height:1.5; }
+      --bg:#f6f7f9;
+      --card:#ffffff;
+      --border:#e6e8ee;
+      --text:#111827;
+      --muted:#6b7280;
 
-    /* ===== Layout (PC first) ===== */
-    .wrap{
-      max-width: 1200px;
+      --navy:#0b1f3a;          /* アクセント（ネイビー） */
+      --navy2:#12335c;
+      --green:#16a34a;         /* スコア（グリーン） */
+      --green2:#22c55e;
+
+      --shadow: 0 1px 0 rgba(0,0,0,.03);
+      --radius: 14px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{ margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; }
+    a{ color:inherit; }
+    header{
+      max-width: 1180px;
       margin: 0 auto;
-      padding: 12px 20px 22px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;   /* Baseline | Work */
-      grid-template-rows: auto auto;    /* top row panels + evaluation full width */
-      gap: 14px;
-      align-items: start;
+      padding: 18px 18px 10px;
     }
-    /* Evaluation spans both columns */
-    .evalSpan{ grid-column: 1 / -1; }
-
-    /* Cards */
-    .card{
-      background:#fff; border:1px solid #e6e8ee; border-radius:12px;
-      box-shadow: 0 1px 0 rgba(0,0,0,.03);
-      padding:14px;
+    h1{
+      margin:0;
+      font-size: 18px;
+      letter-spacing: .2px;
+      display:flex;
+      align-items:center;
+      gap:10px;
     }
-
-    .titlebar{
-      display:flex; align-items:center; justify-content:space-between;
-      gap:10px; margin-bottom:12px;
-    }
-    .tag{
-      font-size:12px; color:#444; padding:4px 10px;
-      border:1px solid #e6e8ee; border-radius:999px; background:#fafbfc;
+    .badge{
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--navy);
+      font-weight: 700;
       white-space: nowrap;
     }
-    .btnrow{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-
-    button{
-      appearance:none; border:0; border-radius:10px; padding:10px 12px;
-      background:#111; color:#fff; font-weight:600; font-size:14px;
-      cursor:pointer;
+    .note{
+      margin: 8px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
     }
-    button:disabled{ opacity:.5; cursor:not-allowed; }
-    .ghost{ background:#fff; color:#111; border:1px solid #e6e8ee; }
-    .small{ font-size:12px; padding:9px 10px; border-radius:10px; }
 
-    /* Panel internal layout */
+    /* ===== Main layout (PC first) ===== */
+    .wrap{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 12px 18px 22px;
+      display:grid;
+      grid-template-columns: 1fr; /* 縦積み：上(Baseline)・中央(Work)・下(Dashboard) */
+      gap: 14px;
+    }
+
+    /* ===== Card ===== */
+    .card{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+    .titlebar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .tag{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size: 13px;
+      font-weight: 900;
+      color: var(--navy);
+      letter-spacing: .2px;
+    }
+    .tag small{
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 999px;
+      background:#fafbfc;
+      white-space:nowrap;
+    }
+
+    /* Buttons */
+    .btnrow{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; align-items:center; }
+    button{
+      appearance:none; border:0; border-radius: 12px;
+      padding: 10px 12px;
+      background: var(--navy);
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      cursor:pointer;
+      box-shadow: 0 1px 0 rgba(0,0,0,.06);
+    }
+    button:hover{ filter: brightness(1.05); }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+    .ghost{
+      background:#fff;
+      color: var(--navy);
+      border: 1px solid var(--border);
+      font-weight: 800;
+    }
+    .small{ font-size: 12px; padding: 9px 10px; border-radius: 12px; }
+
+    /* Busy highlight */
+    .card[data-busy="1"]{
+      border-color: rgba(11,31,58,.35);
+      box-shadow: 0 0 0 4px rgba(11,31,58,.08), var(--shadow);
+    }
+
+    /* ===== Panel internal layout ===== */
     .panelGrid{
       display:grid;
-      grid-template-columns: 1.25fr 0.95fr; /* waveform | metrics */
+      grid-template-columns: 1.25fr 0.95fr; /* 波形 | 指標 */
       gap: 12px;
-      align-items: start;
+      align-items:start;
     }
 
     canvas{
-      width:100%;
-      height:130px;                 /* bigger for PC */
-      border-radius:10px;
-      background:#0b1220;
-      border:1px solid #1b2a4a;
+      width: 100%;
+      height: 140px; /* PC向け */
+      border-radius: 12px;
+      background: #0b1220;
+      border: 1px solid #1b2a4a;
       display:block;
     }
-    .status{ margin-top:8px; font-size:12px; color:#555; }
 
-    .rightCol{ display:flex; flex-direction:column; gap:10px; }
+    .status{
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .status strong{ color: var(--text); }
+
+    /* Metrics */
+    .rightCol{ display:flex; flex-direction:column; gap: 10px; }
     .grid{
       display:grid;
       grid-template-columns: 1fr 1fr;
-      gap:10px;
+      gap: 10px;
     }
     .metric{
-      border:1px solid #e6e8ee; border-radius:10px; padding:10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      background: #fafbfc;
+      min-height: 74px;
+    }
+    .metric .k{ font-size: 12px; color: var(--muted); font-weight:700; }
+    .metric .v{ font-size: 16px; font-weight: 900; margin-top: 3px; }
+    .metric .t{ margin-top: 6px; font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .metric .t .now{ color: var(--navy); font-weight: 900; }
+    .metric .t .goal{ color: #0f172a; font-weight: 800; }
+    .metric .bar{
+      margin-top: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #eef2f7;
+      overflow:hidden;
+      border: 1px solid var(--border);
+    }
+    .metric .bar > i{
+      display:block;
+      height:100%;
+      width: 0%;
+      background: rgba(18,51,92,.85); /* ネイビー */
+    }
+    .metric .bar > i.good{
+      background: rgba(34,197,94,.85); /* グリーン */
+    }
+
+    /* ===== Dashboard (Bottom) ===== */
+    .dashTop{
+      display:grid;
+      grid-template-columns: 1.15fr 1fr 1fr; /* Voice Score | 変化 | 今日のベスト */
+      gap: 12px;
+      align-items:stretch;
+      margin-bottom: 12px;
+    }
+    .tile{
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fff;
+      box-shadow: var(--shadow);
+      min-height: 92px;
+    }
+    .tile .k{ font-size: 12px; color: var(--muted); font-weight: 800; }
+    .tile .v{ margin-top: 6px; font-weight: 1000; letter-spacing: .2px; }
+    .tile .sub{ margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    .scoreBig .v{
+      font-size: 34px;
+      color: var(--green);
+      display:flex;
+      align-items:baseline;
+      gap: 8px;
+    }
+    .scoreBig .v span{
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .changeBig .v{
+      font-size: 30px;
+      color: var(--navy);
+      display:flex;
+      align-items:baseline;
+      gap: 8px;
+    }
+    .changeBig .v .sign{
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 900;
+    }
+
+    .bestBig .v{
+      font-size: 18px;
+      color: var(--navy);
+      line-height: 1.3;
+    }
+    .bestBig .v b{ font-size: 22px; }
+
+    .dashBottom{
+      display:grid;
+      grid-template-columns: 1fr 1fr; /* 改善ポイント | Drill */
+      gap: 12px;
+      align-items:start;
+    }
+
+    /* Improvement */
+    .improveBox .title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .improveBox .title b{
+      color: var(--navy);
+      font-size: 13px;
+      letter-spacing: .2px;
+    }
+    .improveBox .main{
+      margin-top: 8px;
+      font-size: 16px;
+      font-weight: 1000;
+      line-height: 1.55;
+    }
+    .improveBox .reason{
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* Drill */
+    .drillBox .title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .drillBox .title b{
+      color: var(--navy);
+      font-size: 13px;
+      letter-spacing: .2px;
+    }
+    .tryCount{
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 900;
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 999px;
       background:#fafbfc;
-      font-size:13px;
+      white-space:nowrap;
     }
-    .metric .k{ color:#666; font-size:12px; }
-    .metric .v{ font-weight:800; font-size:16px; margin-top:3px; }
-
-    /* Evaluation */
-    .eval{
-      display:flex; gap:14px; align-items:stretch; flex-wrap:nowrap;
+    .drillBox .menu{
+      border: 1px dashed rgba(11,31,58,.25);
+      background: rgba(11,31,58,.03);
+      border-radius: 14px;
+      padding: 10px;
     }
-    .scorebox{
-      flex: 0 0 200px;
-      border:1px solid #e6e8ee; border-radius:12px; padding:14px;
+    .drillBox .menu .h{
+      font-weight: 1000;
+      color: var(--navy);
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .drillBox .menu .p{
+      margin:0;
+      font-size: 12px;
+      color: #0f172a;
+      line-height: 1.6;
+      font-weight: 700;
+    }
+    .drillBox .menu .time{
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 900;
+    }
+    .drillBox .phrase{
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+      border: 1px solid var(--border);
       background:#fff;
+      border-radius: 14px;
+      padding: 10px;
     }
-    .scorebox .k{ font-size:12px; color:#666; }
-    .scorebox .v{ font-size:34px; font-weight:900; margin-top:6px; }
-    .scorebox .sub{ margin-top:8px; font-size:12px; color:#555; line-height:1.5; }
+    .drillBox .phrase b{ color: var(--navy); }
+    .drillBox .actions{
+      margin-top: 10px;
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content:flex-end;
+      align-items:center;
+    }
 
-    .comment{
-      flex: 1;
-      border:1px solid #e6e8ee; border-radius:12px; padding:14px;
+    .afterBox{
+      margin-top: 10px;
+      border: 1px solid var(--border);
       background:#fff;
-      min-width: 420px;
+      border-radius: 14px;
+      padding: 10px;
     }
-    .comment .k{ font-size:12px; color:#666; }
-    .comment .v{ font-size:15px; font-weight:800; margin-top:8px; line-height:1.6; }
-    .comment .sub{ margin-top:8px; font-size:12px; color:#555; line-height:1.6; }
+    .afterBox .k{ font-size: 12px; color: var(--muted); font-weight: 900; }
+    .afterBox pre{
+      margin: 6px 0 0;
+      white-space: pre-wrap;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #0f172a;
+      font-weight: 800;
+    }
 
-    details{ margin-top:12px; }
-    summary{ cursor:pointer; color:#333; font-size:13px; }
-    .footrow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    /* History (keep existing feature, now compact) */
+    details{ margin-top: 12px; }
+    summary{ cursor:pointer; color: var(--navy); font-size: 13px; font-weight: 900; }
+    .footrow{ display:flex; gap:8px; flex-wrap:wrap; margin-top: 10px; justify-content:flex-end; }
     .hist{
-      font-size:12px; color:#333; line-height:1.6; margin-top:8px;
-      background:#fafbfc; border:1px solid #e6e8ee; border-radius:10px;
-      padding:10px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: #0f172a;
+      line-height: 1.6;
+      background:#fafbfc;
+      border:1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      white-space: pre-wrap;
     }
 
-    /* ===== Responsive fallback ===== */
+    footer{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 18px 22px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align:right;
+    }
+
+    /* ===== Responsive ===== */
     @media (max-width: 980px){
-      .wrap{ grid-template-columns: 1fr; }
-      .evalSpan{ grid-column: 1; }
+      canvas{ height: 118px; }
       .panelGrid{ grid-template-columns: 1fr; }
-      canvas{ height:110px; }
-      .eval{ flex-wrap:wrap; }
-      .comment{ min-width: 0; }
-      .scorebox{ flex: 1 1 220px; }
+      .dashTop{ grid-template-columns: 1fr; }
+      .dashBottom{ grid-template-columns: 1fr; }
     }
   </style>
 </head>
+
 <body>
 <header>
-  <h1>音声切り替えセルフチェック（音声は保存しません）</h1>
+  <h1>
+    AI Voice Trainer
+    <span class="badge">研修向け / 数値のみ保存</span>
+  </h1>
   <div class="note">
-    ①平常時→②仕事モードの順で録音（各5秒）。保存するのは数値（RMS / F0中央値 / F0揺れ / 乖離%）のみ。<br/>
+    ①平常時 → ②仕事モードの順で録音（各5秒）。保存するのは数値（RMS / F0中央値 / F0揺れ / F0レンジ / スコア等）だけです。<br/>
     ※マイクは https または http://localhost で許可されることが多いです（file:// 直開きはNGのことがあります）
   </div>
 </header>
 
-<div class="wrap">
+<main class="wrap">
 
-  <!-- Baseline -->
+  <!-- =========================================================
+    ① Baseline（平常音声）
+    既存のIDは維持（録音/解析ロジックを壊さない）
+  ========================================================= -->
   <section class="card" id="baselineCard">
     <div class="titlebar">
-      <div class="tag">① 平常時（Baseline）</div>
+      <div class="tag">① Baseline（平常音声） <small>比較の基準</small></div>
       <div class="btnrow">
         <button id="btnRecBase">5秒録音</button>
         <button id="btnClearBase" class="ghost small">クリア</button>
@@ -156,25 +433,44 @@
       <div>
         <canvas id="waveBase" width="1100" height="200" aria-label="baseline waveform"></canvas>
         <div class="status" id="statusBase">未録音</div>
-        <div class="status">例：「おはようございます。ひでさんです。今日もよろしくお願いします」</div>
+        <div class="status">例：<strong>「おはようございます。ひでさんです。今日もよろしくお願いします」</strong></div>
       </div>
 
       <div class="rightCol">
         <div class="grid">
-          <div class="metric"><div class="k">RMS（音量）</div><div class="v" id="baseRms">—</div></div>
-          <div class="metric"><div class="k">F0 median（トーン）</div><div class="v" id="baseF0med">—</div></div>
-          <div class="metric"><div class="k">F0 std（抑揚）</div><div class="v" id="baseF0std">—</div></div>
-          <div class="metric"><div class="k">F0 range（メリハリ）</div><div class="v" id="baseF0rng">—</div></div>
+          <div class="metric">
+            <div class="k">RMS（声量）</div>
+            <div class="v" id="baseRms">—</div>
+            <div class="t">比較用の基準値です</div>
+          </div>
+          <div class="metric">
+            <div class="k">F0 median（トーン）</div>
+            <div class="v" id="baseF0med">—</div>
+            <div class="t">比較用の基準値です</div>
+          </div>
+          <div class="metric">
+            <div class="k">F0 std（抑揚）</div>
+            <div class="v" id="baseF0std">—</div>
+            <div class="t">比較用の基準値です</div>
+          </div>
+          <div class="metric">
+            <div class="k">F0 range（メリハリ）</div>
+            <div class="v" id="baseF0rng">—</div>
+            <div class="t">比較用の基準値です</div>
+          </div>
         </div>
         <div class="status">補足：静かな場所・マイク距離一定（拳1つ）だと安定します。</div>
       </div>
     </div>
   </section>
 
-  <!-- Work -->
+  <!-- =========================================================
+    ② Work（接客音声）
+    既存のIDは維持
+  ========================================================= -->
   <section class="card" id="workCard">
     <div class="titlebar">
-      <div class="tag">② 仕事モード（Work）</div>
+      <div class="tag">② Work（接客音声） <small>ここを伸ばす</small></div>
       <div class="btnrow">
         <button id="btnRecWork">5秒録音</button>
         <button id="btnClearWork" class="ghost small">クリア</button>
@@ -185,62 +481,156 @@
       <div>
         <canvas id="waveWork" width="1100" height="200" aria-label="work waveform"></canvas>
         <div class="status" id="statusWork">未録音</div>
-        <div class="status">例：「お電話ありがとうございます。本日担当をいたします、ひでさんです」</div>
+        <div class="status">例：<strong>「お電話ありがとうございます。本日担当をいたします、ひでさんです」</strong></div>
       </div>
 
       <div class="rightCol">
         <div class="grid">
-          <div class="metric"><div class="k">RMS（音量）</div><div class="v" id="workRms">—</div></div>
-          <div class="metric"><div class="k">F0 median（トーン）</div><div class="v" id="workF0med">—</div></div>
-          <div class="metric"><div class="k">F0 std（抑揚）</div><div class="v" id="workF0std">—</div></div>
-          <div class="metric"><div class="k">F0 range（メリハリ）</div><div class="v" id="workF0rng">—</div></div>
+          <!-- 各指標：現在の変化％と「目標レンジ」を表示（UIのみ） -->
+          <div class="metric">
+            <div class="k">RMS（声量）</div>
+            <div class="v" id="workRms">—</div>
+            <div class="t">
+              現在 <span class="now" id="nowRmsPct">—</span> / 目標 <span class="goal" id="goalRms">+10〜20%</span>
+            </div>
+            <div class="bar"><i id="barRms"></i></div>
+          </div>
+
+          <div class="metric">
+            <div class="k">F0 median（トーン）</div>
+            <div class="v" id="workF0med">—</div>
+            <div class="t">
+              現在 <span class="now" id="nowF0medPct">—</span> / 目標 <span class="goal" id="goalF0med">+20〜40%</span>
+            </div>
+            <div class="bar"><i id="barF0med"></i></div>
+          </div>
+
+          <div class="metric">
+            <div class="k">F0 std（抑揚）</div>
+            <div class="v" id="workF0std">—</div>
+            <div class="t">
+              現在 <span class="now" id="nowF0stdPct">—</span> / 目標 <span class="goal" id="goalF0std">+10〜30%</span>
+            </div>
+            <div class="bar"><i id="barF0std"></i></div>
+          </div>
+
+          <div class="metric">
+            <div class="k">F0 range（メリハリ）</div>
+            <div class="v" id="workF0rng">—</div>
+            <div class="t">
+              現在 <span class="now" id="nowF0rngPct">—</span> / 目標 <span class="goal" id="goalF0rng">+15〜35%</span>
+            </div>
+            <div class="bar"><i id="barF0rng"></i></div>
+          </div>
         </div>
         <div class="status">補足：声が小さいとF0が拾いにくい場合があります。</div>
       </div>
     </div>
   </section>
 
-  <!-- Evaluation -->
-  <section class="card evalSpan">
+  <!-- =========================================================
+    下段：Voice Score / 変化率 / 改善コメント / Drill
+    既存の保存/履歴機能は残しつつ、トレーニング導線を強化
+  ========================================================= -->
+  <section class="card" id="dashCard">
     <div class="titlebar">
-      <div class="tag">評価</div>
+      <div class="tag">トレーニングダッシュボード <small>目標 / 成長 / Drill</small></div>
       <div class="btnrow">
+        <!-- 既存機能：数値保存（7日） -->
         <button id="btnSave" class="ghost small" disabled>数値を保存（7日）</button>
         <button id="btnClearAll" class="ghost small">全クリア</button>
       </div>
     </div>
 
-    <div class="eval">
-      <div class="scorebox">
-        <div class="k">乖離割合</div>
-        <div class="v" id="diffPct">—%</div>
+    <!-- 上段：Voice Score / Workモード変化 / 今日のベスト -->
+    <div class="dashTop">
+      <div class="tile scoreBig">
+        <div class="k">Voice Score</div>
+        <div class="v"><span id="voiceScore">—</span><span>/ 100</span></div>
+        <div class="sub" id="voiceScoreSub">BaselineとWorkを録音すると算出されます。</div>
+      </div>
+
+      <div class="tile changeBig">
+        <div class="k">仕事モード変化</div>
+        <div class="v"><span class="sign">+</span><span id="diffPct">—</span><span class="sign">%</span></div>
         <div class="sub" id="diffDetail">BaselineとWorkを録音すると表示されます。</div>
       </div>
-      <div class="comment">
-        <div class="k">コメント</div>
-        <div class="v" id="commentMain">—</div>
-        <div class="sub" id="commentSub"></div>
 
-        <details>
-          <summary>履歴（数値のみ・直近7日）</summary>
-          <div class="footrow">
-            <button id="btnLoadHist" class="ghost small">表示更新</button>
-            <button id="btnWipeHist" class="ghost small">履歴を全削除</button>
-          </div>
-          <div class="hist" id="histArea">（未表示）</div>
-        </details>
+      <div class="tile bestBig">
+        <div class="k">今日のベスト（数値のみ）</div>
+        <div class="v" id="todayBest">
+          <b>—</b><br/>（まずは録音してください）
+        </div>
+        <div class="sub" id="todayBestSub">最高スコア / 最大改善量を記録します（音声は保存しません）。</div>
       </div>
     </div>
+
+    <!-- 下段：改善ポイント（1つだけ） / Drill -->
+    <div class="dashBottom">
+      <div class="tile improveBox">
+        <div class="title">
+          <b>改善ポイント（1つだけ）</b>
+          <span class="badge" id="improveTag">—</span>
+        </div>
+        <div class="main" id="commentMain">—</div>
+        <div class="reason" id="commentSub"></div>
+      </div>
+
+      <div class="tile drillBox">
+        <div class="title">
+          <b>今日の練習（Drill）</b>
+          <span class="tryCount" id="tryCount">Try 0/3</span>
+        </div>
+
+        <div class="menu">
+          <div class="h" id="drillTitle">—</div>
+          <p class="p" id="drillText">BaselineとWorkを録音すると、今日の練習が自動で選ばれます。</p>
+          <div class="time" id="drillTime">（20〜30秒）</div>
+        </div>
+
+        <div class="phrase" id="drillPhrase">
+          <b>練習用フレーズ</b><br/>
+          「お電話ありがとうございます。<br/>
+          本日担当いたします◯◯でございます。」
+        </div>
+
+        <div class="actions">
+          <!-- Try Again：Work再録音（既存録音処理を呼ぶだけ） -->
+          <button id="btnTryAgain" class="small" disabled>Try Again（再録音）</button>
+          <button id="btnLoadHist" class="ghost small">履歴更新</button>
+          <button id="btnWipeHist" class="ghost small">履歴削除</button>
+        </div>
+
+        <div class="afterBox" id="afterBox" style="display:none;">
+          <div class="k">Before / After（直前のWorkと比較）</div>
+          <pre id="afterText">—</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- 履歴（数値のみ） -->
+    <details>
+      <summary>履歴（数値のみ・直近7日）</summary>
+      <div class="hist" id="histArea">（未表示）</div>
+    </details>
   </section>
 
-</div>
+</main>
+
+<footer>
+  「音声は保存されません。数値のみ保存されます。」
+</footer>
 
 <script>
 (() => {
-  // ====== Security/Policy: no external network, no audio persistence ======
-  // We store ONLY numeric metrics in localStorage.
+  /* =========================================================
+    重要：既存機能（録音処理 / 音声解析 / 波形表示 / 指標計算）は変更しない
+    - analyzeAndRender / recordForSeconds / computeRMS / estimateF0Series 等は維持
+    - UI要件に合わせた “表示・スコア算出・ドリル・再録音” を追加
+  ========================================================= */
 
   const ui = {
+    // Buttons (existing)
     btnRecBase: document.getElementById('btnRecBase'),
     btnRecWork: document.getElementById('btnRecWork'),
     btnClearBase: document.getElementById('btnClearBase'),
@@ -250,12 +640,22 @@
     btnLoadHist: document.getElementById('btnLoadHist'),
     btnWipeHist: document.getElementById('btnWipeHist'),
 
+    // New buttons
+    btnTryAgain: document.getElementById('btnTryAgain'),
+
+    // Status (existing)
     statusBase: document.getElementById('statusBase'),
     statusWork: document.getElementById('statusWork'),
 
+    // Cards (for busy highlight)
+    baselineCard: document.getElementById('baselineCard'),
+    workCard: document.getElementById('workCard'),
+
+    // Wave canvas (existing)
     waveBase: document.getElementById('waveBase'),
     waveWork: document.getElementById('waveWork'),
 
+    // Metrics output (existing)
     baseRms: document.getElementById('baseRms'),
     baseF0med: document.getElementById('baseF0med'),
     baseF0std: document.getElementById('baseF0std'),
@@ -266,20 +666,65 @@
     workF0std: document.getElementById('workF0std'),
     workF0rng: document.getElementById('workF0rng'),
 
+    // New target/now % (UI only)
+    nowRmsPct: document.getElementById('nowRmsPct'),
+    nowF0medPct: document.getElementById('nowF0medPct'),
+    nowF0stdPct: document.getElementById('nowF0stdPct'),
+    nowF0rngPct: document.getElementById('nowF0rngPct'),
+
+    barRms: document.getElementById('barRms'),
+    barF0med: document.getElementById('barF0med'),
+    barF0std: document.getElementById('barF0std'),
+    barF0rng: document.getElementById('barF0rng'),
+
+    // Dashboard
     diffPct: document.getElementById('diffPct'),
     diffDetail: document.getElementById('diffDetail'),
+    voiceScore: document.getElementById('voiceScore'),
+    voiceScoreSub: document.getElementById('voiceScoreSub'),
+    improveTag: document.getElementById('improveTag'),
     commentMain: document.getElementById('commentMain'),
     commentSub: document.getElementById('commentSub'),
 
+    // Drill
+    drillTitle: document.getElementById('drillTitle'),
+    drillText: document.getElementById('drillText'),
+    drillTime: document.getElementById('drillTime'),
+    drillPhrase: document.getElementById('drillPhrase'),
+    tryCount: document.getElementById('tryCount'),
+
+    // Before/After
+    afterBox: document.getElementById('afterBox'),
+    afterText: document.getElementById('afterText'),
+
+    // Today best
+    todayBest: document.getElementById('todayBest'),
+    todayBestSub: document.getElementById('todayBestSub'),
+
+    // History
     histArea: document.getElementById('histArea')
   };
 
+  // === Existing settings (keep) ===
   const HIST_KEY = 'voice_switch_history_v1';
   const KEEP_DAYS = 7;
 
+  // === New: today best (numeric only) ===
+  const TODAY_KEY = 'voice_trainer_today_best_v1';
+
+  // === New: Try Again session control (max 3) ===
+  const MAX_TRIES = 3;
+  let tryCount = 0;
+
+  // === State ===
   let baseMetrics = null;
   let workMetrics = null;
 
+  // For Before/After (compare "直前のWork"と新しいWork)
+  let prevWorkMetrics = null;
+  let lastTheme = null; // 'volume' | 'tone' | 'express' | 'stability'
+
+  // ===== Audio Context (existing) =====
   let audioCtx = null;
   function ensureAudioCtx(){
     if(!audioCtx){
@@ -288,21 +733,34 @@
     return audioCtx;
   }
 
+  // ===== Helpers =====
   function fmt(n, digits=3){
     if(!Number.isFinite(n)) return '—';
     return n.toFixed(digits);
   }
   function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
 
-  function setBusy(isBusy){
+  function setBusy(isBusy, whichCard=null){
     ui.btnRecBase.disabled = isBusy;
     ui.btnRecWork.disabled = isBusy;
     ui.btnClearBase.disabled = isBusy;
     ui.btnClearWork.disabled = isBusy;
     ui.btnClearAll.disabled = isBusy;
+
+    // 保存ボタン：既存仕様
     ui.btnSave.disabled = isBusy || !(baseMetrics && workMetrics);
+
+    // Try Again：Workが揃っていて、回数が残っていて、busyでない
+    ui.btnTryAgain.disabled = isBusy || !(baseMetrics && workMetrics) || (tryCount >= MAX_TRIES);
+
+    // Busy highlight（UIのみ）
+    ui.baselineCard.dataset.busy = (isBusy && whichCard === 'base') ? "1" : "0";
+    ui.workCard.dataset.busy     = (isBusy && whichCard === 'work') ? "1" : "0";
   }
 
+  /* =========================================================
+    既存の録音ロジック（変更しない）
+  ========================================================= */
   async function recordForSeconds(seconds=5){
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     try{
@@ -452,8 +910,12 @@
     return { median, mean, std, min, max, range };
   }
 
+  /* =========================================================
+    既存の解析＋表示（指標/波形）を維持しつつ、
+    “追加UIの更新” を評価関数に寄せる
+  ========================================================= */
   async function analyzeAndRender(kind){
-    setBusy(true);
+    setBusy(true, kind);
 
     const statusEl = (kind === 'base') ? ui.statusBase : ui.statusWork;
     statusEl.textContent = '録音中…（5秒）';
@@ -488,7 +950,14 @@
         ui.baseF0std.textContent = Number.isFinite(metrics.f0_std) ? `${fmt(metrics.f0_std, 1)} Hz` : '—';
         ui.baseF0rng.textContent = Number.isFinite(metrics.f0_range) ? `${fmt(metrics.f0_range, 1)} Hz` : '—';
         statusEl.textContent = `完了（有声音フレーム: ${metrics.voicedFrames}）`;
+
+        // Baselineを取り直したら、Tryセッションをリセット（UI体験のため）
+        // ※解析ロジックではなく “セッションUI” のみ
+        resetTrySession();
       } else {
+        // Workの更新前に “直前のWork” を保持（Before/Afterのため）
+        if(workMetrics) prevWorkMetrics = structuredClone(workMetrics);
+
         workMetrics = metrics;
         ui.workRms.textContent = fmt(metrics.rms, 4);
         ui.workF0med.textContent = Number.isFinite(metrics.f0_median) ? `${fmt(metrics.f0_median, 1)} Hz` : '—';
@@ -497,29 +966,150 @@
         statusEl.textContent = `完了（有声音フレーム: ${metrics.voicedFrames}）`;
       }
 
-      evaluateIfReady();
+      evaluateAndUpdateUI(kind);
     } catch(err){
       console.error(err);
       statusEl.textContent = 'エラー：マイク許可 or 録音に失敗しました';
       alert('録音/解析に失敗しました。マイク許可がONか、https/localhostで開いているか確認してください。');
     } finally {
-      setBusy(false);
+      setBusy(false, null);
     }
   }
 
-  function evaluateIfReady(){
-    if(!(baseMetrics && workMetrics)){
-      ui.diffPct.textContent = '—%';
-      ui.commentMain.textContent = '—';
-      ui.commentSub.textContent = '';
-      ui.diffDetail.textContent = 'BaselineとWorkを録音すると表示されます。';
-      ui.btnSave.disabled = true;
-      return;
-    }
+  /* =========================================================
+    UI追加要件の中核：
+    - 「仕事モード変化 +xx%」表現
+    - Voice Score（100点）
+    - 改善ポイントは1つだけ
+    - Target（目標レンジ）を各指標へ
+    - Drill（20-30秒）＋Try Again（最大3回）
+    - Before/After表示
+    - 今日のベスト（数値のみ）
+  ========================================================= */
 
+  // 目標レンジ（%）：Baseline比の増加を前提（研修向けのシンプル設計）
+  const TARGETS = {
+    volume:  { min: 10, max: 20, label: "声量（RMS）" },
+    tone:    { min: 20, max: 40, label: "トーン（F0 median）" },
+    express: { min: 12, max: 32, label: "抑揚（F0 std / range）" },
+    // 安定度：変化%というより “安定スコア” を使う（既存指標から算出）
+    stability: { min: 70, max: 90, label: "安定度" } // 安定スコア（0-100）の目安
+  };
+
+  function pctChange(workVal, baseVal){
+    const eps = 1e-6;
+    if(!Number.isFinite(workVal) || !Number.isFinite(baseVal)) return NaN;
+    return ((workVal - baseVal) / (baseVal + eps)) * 100;
+  }
+
+  function withinRangeScore(pct, min, max){
+    // 0..1：目標未達は0〜、範囲内は1、超えすぎは少し減点（やりすぎ抑制）
+    if(!Number.isFinite(pct)) return 0;
+
+    if(pct < 0) return 0; // マイナスは今回は「伸びしろ」として0扱い
+    if(pct < min) return clamp(pct / min, 0, 1);
+
+    if(pct <= max) return 1;
+
+    // 超えすぎは軽く減点（maxの2倍で0.6くらい）
+    const over = pct - max;
+    const span = max;
+    const penalty = clamp(over / (span + 1e-6), 0, 1);
+    return clamp(1 - 0.4 * penalty, 0.6, 1);
+  }
+
+  function computeStabilityScore(metrics){
+    // 既存指標のみで作る“安定度”
+    // 目安：F0の変動係数（std/median）が大きいほど不安定 → 減点
+    // voicedFramesが少ない場合も減点（小声/無声音が多い可能性）
+    const eps = 1e-6;
+    const med = metrics?.f0_median;
+    const sd  = metrics?.f0_std;
+    const vf  = metrics?.voicedFrames ?? 0;
+
+    if(!Number.isFinite(med) || !Number.isFinite(sd) || med <= 0) return 40; // 判定不可は低め
+
+    const cv = sd / (med + eps); // 例：0.10〜0.25くらい
+    let score = 100 - (cv * 260); // 0.10→74点、0.15→61点 くらいの感覚
+    score = clamp(score, 0, 100);
+
+    // voicedFrames（5秒で多いほど良い）を軽く反映
+    if(vf < 6) score -= 18;
+    else if(vf < 10) score -= 8;
+
+    return clamp(score, 0, 100);
+  }
+
+  function computeVoiceScore(base, work){
+    // Voice Score 100点満点
+    // 声量（RMS）/ トーン（F0 median）/ 抑揚（std+range）/ 安定度
+    // ※既存指標から算出（解析は変えない）
+    const vPct = pctChange(work.rms, base.rms);
+    const tPct = pctChange(work.f0_median, base.f0_median);
+    const sPct = pctChange(work.f0_std, base.f0_std);
+    const rPct = pctChange(work.f0_range, base.f0_range);
+    const ePct = (Number.isFinite(sPct) && Number.isFinite(rPct)) ? (sPct + rPct) / 2 : (Number.isFinite(sPct) ? sPct : rPct);
+
+    const stScore = computeStabilityScore(work);
+
+    // “達成度”0..1
+    const vAch = withinRangeScore(vPct, TARGETS.volume.min, TARGETS.volume.max);
+    const tAch = withinRangeScore(tPct, TARGETS.tone.min, TARGETS.tone.max);
+    const eAch = withinRangeScore(ePct, TARGETS.express.min, TARGETS.express.max);
+
+    // 安定度は 0..1 に正規化（目標 min〜max）
+    const stAch = clamp((stScore - TARGETS.stability.min) / (TARGETS.stability.max - TARGETS.stability.min), 0, 1);
+
+    // 重み（研修ツール想定：声量/トーン/抑揚/安定）
+    const score =
+      25 * vAch +
+      25 * tAch +
+      30 * eAch +
+      20 * stAch;
+
+    return {
+      score: Math.round(clamp(score, 0, 100)),
+      parts: { vPct, tPct, ePct, sPct, rPct, stScore, vAch, tAch, eAch, stAch }
+    };
+  }
+
+  function updateTargetUI(parts){
+    // Work側の各指標に「現在 +x% / 目標 +a〜b%」を反映（UIのみ）
+    const v = parts.vPct;
+    const t = parts.tPct;
+    const s = parts.sPct;
+    const r = parts.rPct;
+
+    ui.nowRmsPct.textContent   = Number.isFinite(v) ? `${(v>=0?'+':'')}${fmt(v,1)}%` : '—';
+    ui.nowF0medPct.textContent = Number.isFinite(t) ? `${(t>=0?'+':'')}${fmt(t,1)}%` : '—';
+    ui.nowF0stdPct.textContent = Number.isFinite(s) ? `${(s>=0?'+':'')}${fmt(s,1)}%` : '—';
+    ui.nowF0rngPct.textContent = Number.isFinite(r) ? `${(r>=0?'+':'')}${fmt(r,1)}%` : '—';
+
+    // 進捗バー：目標maxを100%として、現在を0..120%まで表示
+    function setBar(el, pct, min, max){
+      if(!Number.isFinite(pct)){
+        el.style.width = '0%';
+        el.classList.remove('good');
+        return;
+      }
+      const norm = clamp(pct / (max || 1), 0, 1.2);
+      el.style.width = `${norm * 100}%`;
+      if(pct >= min && pct <= max) el.classList.add('good');
+      else el.classList.remove('good');
+    }
+    setBar(ui.barRms, v, TARGETS.volume.min, TARGETS.volume.max);
+    setBar(ui.barF0med, t, TARGETS.tone.min, TARGETS.tone.max);
+    setBar(ui.barF0std, s, 10, 30);
+    setBar(ui.barF0rng, r, 15, 35);
+  }
+
+  function computeWorkModeChange(parts){
+    // 既存の「乖離率」を、ポジティブ表現「仕事モード変化 +xx%」として再構成
+    // ここは “差の大きさ” を表す指標として利用（良し悪しの判断はScore側で）
     const eps = 1e-6;
 
     const loud = Math.abs(workMetrics.rms - baseMetrics.rms) / (baseMetrics.rms + eps);
+
     const pitch = (Number.isFinite(baseMetrics.f0_median) && Number.isFinite(workMetrics.f0_median))
       ? Math.abs(workMetrics.f0_median - baseMetrics.f0_median) / (baseMetrics.f0_median + eps)
       : 0;
@@ -531,54 +1121,278 @@
     const divergence = 0.4*loud + 0.4*pitch + 0.2*into;
     const pct = clamp(divergence * 100, 0, 100);
 
-    ui.diffPct.textContent = `${fmt(pct, 1)}%`;
-
-    const d1 = `音量差 ${fmt(loud*100, 1)}%`;
+    // 詳細表示（UIはそのまま、文言を整える）
+    const d1 = `声量差 ${fmt(loud*100, 1)}%`;
     const d2 = `トーン差 ${fmt(pitch*100, 1)}%`;
     const d3 = `抑揚差 ${fmt(into*100, 1)}%`;
-    ui.diffDetail.textContent = `${d1} / ${d2} / ${d3}`;
 
-    let main = '';
-    let sub = '';
+    return { changePct: pct, detail: `${d1} / ${d2} / ${d3}` };
+  }
 
-    if(pct <= 20){
-      main = '切り替えが弱めです。本日は第一声を意識していきましょう。';
-      sub = suggestOne(loud, pitch, into, 'up');
-    } else if(pct >= 50){
-      main = '今日もイイ挨拶ですね。その調子でいきましょう。';
-      sub = suggestOne(loud, pitch, into, 'keep');
-    } else {
-      main = 'まずまずです。あと一段だけ明るさ（張り or 抑揚）を足すとさらに良いです。';
-      sub = suggestOne(loud, pitch, into, 'up');
+  function pickOneImprovement(parts){
+    // 改善は “1つだけ” 選ぶ
+    // 達成度が最も低い項目をテーマにする（人間は一度に1つ）
+    const items = [
+      { theme:'volume',    label:'声量',   ach: parts.vAch, reason: buildReason('volume', parts) },
+      { theme:'tone',      label:'トーン', ach: parts.tAch, reason: buildReason('tone', parts) },
+      { theme:'express',   label:'抑揚',   ach: parts.eAch, reason: buildReason('express', parts) },
+      { theme:'stability', label:'安定度', ach: parts.stAch, reason: buildReason('stability', parts) },
+    ];
+
+    items.sort((a,b)=>a.ach - b.ach);
+    return items[0];
+  }
+
+  function buildReason(theme, parts){
+    // “理由”は短く明確に（研修向け）
+    if(theme === 'volume'){
+      const v = parts.vPct;
+      return `理由：声量の変化が小さめです（現在 ${(Number.isFinite(v)?(v>=0?'+':'')+fmt(v,1)+'%':'—')}）。第一声の立ち上げを作ると改善しやすいです。`;
+    }
+    if(theme === 'tone'){
+      const t = parts.tPct;
+      return `理由：トーン変化が小さめです（現在 ${(Number.isFinite(t)?(t>=0?'+':'')+fmt(t,1)+'%':'—')}）。語頭だけ少し高めにすると“明るさ”が出ます。`;
+    }
+    if(theme === 'express'){
+      const e = parts.ePct;
+      return `理由：抑揚（メリハリ）の変化が控えめです（現在 ${(Number.isFinite(e)?(e>=0?'+':'')+fmt(e,1)+'%':'—')}）。強調ポイントを2つ作ると上げやすいです。`;
+    }
+    // stability
+    const s = parts.stScore;
+    return `理由：安定度が伸びしろです（安定度スコア ${fmt(s,0)}）。息量とスピードを整えると安定しやすいです。`;
+  }
+
+  function getDrill(theme){
+    // 20〜30秒のワンポイント練習メニュー（テーマ1つ）
+    // ※実務寄り・研修ツールっぽく、やることを明確に
+    if(theme === 'volume'){
+      return {
+        title: '声量トレーニング（第一声）',
+        text: '語頭の1秒だけ「息を多め＋口を大きめ」に。最初の単語を “少しだけ強く” 発音してください。',
+        time: '20〜25秒',
+        phrase: `「お電話ありがとうございます。\n本日担当いたします◯◯でございます。」`
+      };
+    }
+    if(theme === 'tone'){
+      return {
+        title: 'トーントレーニング（語頭を上げる）',
+        text: '最初の2語だけ、ピッチを “ほんの少し上げる” 意識で。残りは自然に戻してください。',
+        time: '20〜25秒',
+        phrase: `「お電話ありがとうございます。\n本日担当いたします◯◯でございます。」`
+      };
+    }
+    if(theme === 'express'){
+      return {
+        title: '抑揚トレーニング（強調2点）',
+        text: '強調する単語を2つ決め、その単語だけ “少し長めに” 発音。句読点で軽く上下を付けます。',
+        time: '25〜30秒',
+        phrase: `「お電話ありがとうございます。\n本日担当いたします◯◯でございます。」`
+      };
+    }
+    // stability
+    return {
+      title: '安定度トレーニング（速度と息）',
+      text: 'ゆっくりめ（体感0.9倍）で、息を一定に。語尾を急に落とさず “同じテンポ” で最後まで。',
+      time: '25〜30秒',
+      phrase: `「お電話ありがとうございます。\n本日担当いたします◯◯でございます。」`
+    };
+  }
+
+  function updateDrillUI(theme){
+    lastTheme = theme;
+    const drill = getDrill(theme);
+
+    ui.drillTitle.textContent = drill.title;
+    ui.drillText.textContent = drill.text;
+    ui.drillTime.textContent = `（${drill.time}）`;
+
+    // フレーズ表示
+    ui.drillPhrase.innerHTML =
+      `<b>練習用フレーズ</b><br>` +
+      drill.phrase.replaceAll('\n','<br>');
+
+    // Try count
+    ui.tryCount.textContent = `Try ${tryCount}/${MAX_TRIES}`;
+  }
+
+  function updateBeforeAfterIfNeeded(){
+    // Try Again の直後：prevWorkMetrics が存在すれば差分表示
+    if(!prevWorkMetrics || !workMetrics || !baseMetrics){
+      ui.afterBox.style.display = 'none';
+      return;
+    }
+    // 直前work → 今work の改善量（%）
+    // ここは “今回の再録音でどれだけ良くなったか” を見せたいので、
+    // テーマ以外も最大2つまで…ではなく、要件に合わせ “例” にならって主要2つ表示（テーマ＋声量）に固定
+    // ※改善指摘はコメント欄で1つに統制済み。After表示は「結果表示」であり指摘ではない、という扱い。
+    const eps = 1e-6;
+
+    function pctDelta(newVal, oldVal){
+      if(!Number.isFinite(newVal) || !Number.isFinite(oldVal)) return NaN;
+      return ((newVal - oldVal) / (Math.abs(oldVal) + eps)) * 100;
     }
 
-    ui.commentMain.textContent = main;
-    ui.commentSub.textContent = sub;
+    // テーマに応じて “改善量表示の主役” を変える
+    let mainLabel = '—';
+    let mainVal = NaN;
 
+    if(lastTheme === 'volume'){
+      mainLabel = '声量';
+      mainVal = pctDelta(workMetrics.rms, prevWorkMetrics.rms);
+    } else if(lastTheme === 'tone'){
+      mainLabel = 'トーン';
+      mainVal = pctDelta(workMetrics.f0_median, prevWorkMetrics.f0_median);
+    } else if(lastTheme === 'express'){
+      // 抑揚：stdとrangeの平均
+      const a = pctDelta(workMetrics.f0_std, prevWorkMetrics.f0_std);
+      const b = pctDelta(workMetrics.f0_range, prevWorkMetrics.f0_range);
+      mainLabel = '抑揚';
+      mainVal = (Number.isFinite(a) && Number.isFinite(b)) ? (a+b)/2 : (Number.isFinite(a)?a:b);
+    } else {
+      // stability：スコア差（ポイント）
+      mainLabel = '安定度';
+      mainVal = computeStabilityScore(workMetrics) - computeStabilityScore(prevWorkMetrics);
+    }
+
+    // サブとして声量の改善も併記（例に寄せる）
+    const vol = pctDelta(workMetrics.rms, prevWorkMetrics.rms);
+
+    const line1 = `${mainLabel}\n${formatSigned(mainVal, lastTheme==='stability' ? 0 : 1)}${lastTheme==='stability' ? ' pt' : '%'}`;
+    const line2 = `声量\n${formatSigned(vol, 1)}%`;
+
+    ui.afterText.textContent = `${line1}\n\n${line2}`;
+    ui.afterBox.style.display = 'block';
+  }
+
+  function formatSigned(n, digits=1){
+    if(!Number.isFinite(n)) return '—';
+    const s = n >= 0 ? '+' : '';
+    return s + n.toFixed(digits);
+  }
+
+  function resetTrySession(){
+    tryCount = 0;
+    prevWorkMetrics = null;
+    ui.afterBox.style.display = 'none';
+    ui.tryCount.textContent = `Try ${tryCount}/${MAX_TRIES}`;
+    ui.btnTryAgain.disabled = !(baseMetrics && workMetrics) || (tryCount >= MAX_TRIES);
+  }
+
+  function updateTodayBest(score, changePct){
+    // 今日のベスト（数値のみ）
+    // localStorageに、当日（YYYY-MM-DD）の bestScore / bestChange を保存
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth()+1).padStart(2,'0');
+    const d = String(today.getDate()).padStart(2,'0');
+    const keyDate = `${y}-${m}-${d}`;
+
+    let data = null;
+    try{
+      data = JSON.parse(localStorage.getItem(TODAY_KEY) || 'null');
+    }catch{ data = null; }
+
+    if(!data || data.date !== keyDate){
+      data = { date: keyDate, bestScore: -1, bestChange: -1 };
+    }
+
+    if(Number.isFinite(score) && score > data.bestScore) data.bestScore = score;
+    if(Number.isFinite(changePct) && changePct > data.bestChange) data.bestChange = changePct;
+
+    localStorage.setItem(TODAY_KEY, JSON.stringify(data));
+
+    // 表示
+    const bs = (data.bestScore >= 0) ? data.bestScore : '—';
+    const bc = (data.bestChange >= 0) ? fmt(data.bestChange,1) : '—';
+    ui.todayBest.innerHTML = `<b>${bs}</b> / 100<br/>最大改善量：<b>+${bc}%</b>`;
+  }
+
+  function evaluateAndUpdateUI(triggeredByKind){
+    // 未準備の場合
+    if(!(baseMetrics && workMetrics)){
+      ui.diffPct.textContent = '—';
+      ui.diffDetail.textContent = 'BaselineとWorkを録音すると表示されます。';
+
+      ui.voiceScore.textContent = '—';
+      ui.voiceScoreSub.textContent = 'BaselineとWorkを録音すると算出されます。';
+
+      ui.improveTag.textContent = '—';
+      ui.commentMain.textContent = '—';
+      ui.commentSub.textContent = '';
+
+      ui.btnSave.disabled = true;
+      ui.btnTryAgain.disabled = true;
+
+      // Target表示リセット
+      ui.nowRmsPct.textContent = '—';
+      ui.nowF0medPct.textContent = '—';
+      ui.nowF0stdPct.textContent = '—';
+      ui.nowF0rngPct.textContent = '—';
+      [ui.barRms, ui.barF0med, ui.barF0std, ui.barF0rng].forEach(el => { el.style.width='0%'; el.classList.remove('good'); });
+
+      // Drill
+      ui.drillTitle.textContent = '—';
+      ui.drillText.textContent = 'BaselineとWorkを録音すると、今日の練習が自動で選ばれます。';
+      ui.drillTime.textContent = '（20〜30秒）';
+
+      ui.tryCount.textContent = `Try ${tryCount}/${MAX_TRIES}`;
+      ui.afterBox.style.display = 'none';
+
+      return;
+    }
+
+    // 1) 仕事モード変化（+xx%）
+    const { changePct, detail } = computeWorkModeChange();
+    ui.diffPct.textContent = fmt(changePct, 1);
+    ui.diffDetail.textContent = detail;
+
+    // 2) Voice Score
+    const { score, parts } = computeVoiceScore(baseMetrics, workMetrics);
+    ui.voiceScore.textContent = String(score);
+    ui.voiceScoreSub.textContent = buildScoreSub(parts);
+
+    // 3) Target UI（各指標に現在/目標）
+    updateTargetUI(parts);
+
+    // 4) 改善ポイント（1つだけ）
+    const imp = pickOneImprovement(parts);
+    ui.improveTag.textContent = imp.label;
+    ui.commentMain.textContent = `今日は「${imp.label}」を意識してください`;
+    ui.commentSub.textContent = imp.reason;
+
+    // 5) Drill（改善テーマと一致）
+    updateDrillUI(imp.theme);
+
+    // 6) Try Again 有効化（最大3回）
+    ui.btnTryAgain.disabled = (tryCount >= MAX_TRIES);
+
+    // 7) Before/After（Try Again後のみ表示）
+    // triggeredByKind === 'work' かつ prevWorkMetrics がある場合に出る
+    updateBeforeAfterIfNeeded();
+
+    // 8) 今日のベスト（数値のみ）
+    updateTodayBest(score, changePct);
+
+    // 既存保存ボタン
     ui.btnSave.disabled = false;
   }
 
-  function suggestOne(loud, pitch, into, mode){
-    const items = [
-      { key:'音量（張り）', val:loud },
-      { key:'トーン（高さ）', val:pitch },
-      { key:'抑揚（揺れ）', val:into }
+  function buildScoreSub(parts){
+    // 研修向け：スコアの意味を短く
+    // ※要件：改善方向/目標/成長を理解できるUI
+    const v = parts.vPct, t = parts.tPct, e = parts.ePct, st = parts.stScore;
+    const a = [
+      `声量 ${(Number.isFinite(v)?(v>=0?'+':'')+fmt(v,1)+'%':'—')}`,
+      `トーン ${(Number.isFinite(t)?(t>=0?'+':'')+fmt(t,1)+'%':'—')}`,
+      `抑揚 ${(Number.isFinite(e)?(e>=0?'+':'')+fmt(e,1)+'%':'—')}`,
+      `安定度 ${fmt(st,0)}`
     ];
-
-    if(mode === 'keep'){
-      items.sort((a,b)=>b.val - a.val);
-      const top = items[0];
-      if(top.val < 0.08) return '※今回は差が小さめですが、安定した発話ができています。';
-      return `良かった点：${top.key}の切り替えが出ています。`;
-    } else {
-      items.sort((a,b)=>a.val - b.val);
-      const low = items[0];
-      if(low.key.includes('音量')) return '提案：語頭を少しだけ強めに（息多め＋口を開く）すると第一声が立ちます。';
-      if(low.key.includes('トーン')) return '提案：語頭のピッチを少し上げる意識で、明るさが出ます。';
-      return '提案：句読点でほんの少し上下を付けると、抑揚が自然に出ます。';
-    }
+    return a.join(' / ');
   }
 
+  /* =========================================================
+    History（既存：数値のみ保存）
+  ========================================================= */
   function loadHistory(){
     try{
       const raw = localStorage.getItem(HIST_KEY);
@@ -614,10 +1428,10 @@
       const dt = new Date(e.ts);
       const stamp = dt.toLocaleString('ja-JP', { hour12:false });
       return [
-        `• ${stamp} 乖離 ${fmt(e.diffPct,1)}%`,
-        `  Baseline: RMS ${fmt(e.base.rms,4)}, F0med ${fmt(e.base.f0_median,1)}Hz, F0std ${fmt(e.base.f0_std,1)}Hz`,
-        `  Work:     RMS ${fmt(e.work.rms,4)}, F0med ${fmt(e.work.f0_median,1)}Hz, F0std ${fmt(e.work.f0_std,1)}Hz`,
-        `  コメント: ${e.comment || ''}`
+        `• ${stamp} 仕事モード変化 +${fmt(e.diffPct,1)}% / VoiceScore ${Number.isFinite(e.voiceScore)?e.voiceScore:'—'}/100`,
+        `  Baseline: RMS ${fmt(e.base.rms,4)}, F0med ${fmt(e.base.f0_median,1)}Hz, F0std ${fmt(e.base.f0_std,1)}Hz, F0rng ${fmt(e.base.f0_range,1)}Hz`,
+        `  Work:     RMS ${fmt(e.work.rms,4)}, F0med ${fmt(e.work.f0_median,1)}Hz, F0std ${fmt(e.work.f0_std,1)}Hz, F0rng ${fmt(e.work.f0_range,1)}Hz`,
+        `  改善ポイント: ${e.focus || ''}`
       ].join('\n');
     }).join('\n\n');
 
@@ -630,6 +1444,9 @@
     renderHistory();
   }
 
+  /* =========================================================
+    Clear
+  ========================================================= */
   function clearCanvas(canvas){
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -646,6 +1463,8 @@
       ui.baseF0rng.textContent = '—';
       ui.statusBase.textContent = '未録音';
       clearCanvas(ui.waveBase);
+
+      resetTrySession();
     } else {
       workMetrics = null;
       ui.workRms.textContent = '—';
@@ -654,24 +1473,54 @@
       ui.workF0rng.textContent = '—';
       ui.statusWork.textContent = '未録音';
       clearCanvas(ui.waveWork);
+
+      prevWorkMetrics = null;
+      ui.afterBox.style.display = 'none';
     }
-    evaluateIfReady();
+    evaluateAndUpdateUI(null);
   }
 
   function clearAll(){
     clearPanel('base');
     clearPanel('work');
-    ui.diffPct.textContent = '—%';
+
+    ui.diffPct.textContent = '—';
     ui.diffDetail.textContent = 'BaselineとWorkを録音すると表示されます。';
+
+    ui.voiceScore.textContent = '—';
+    ui.voiceScoreSub.textContent = 'BaselineとWorkを録音すると算出されます。';
+
     ui.commentMain.textContent = '—';
     ui.commentSub.textContent = '';
   }
 
-  // Init canvas backgrounds
+  /* =========================================================
+    Init
+  ========================================================= */
   clearCanvas(ui.waveBase);
   clearCanvas(ui.waveWork);
+  renderHistory();
+  evaluateAndUpdateUI(null);
 
-  // Handlers
+  // 今日のベスト表示を初期化（数値のみ）
+  (function initTodayBest(){
+    try{
+      const data = JSON.parse(localStorage.getItem(TODAY_KEY) || 'null');
+      if(!data){
+        ui.todayBest.innerHTML = `<b>—</b> / 100<br/>最大改善量：<b>—</b>`;
+        return;
+      }
+      const bs = (data.bestScore >= 0) ? data.bestScore : '—';
+      const bc = (data.bestChange >= 0) ? fmt(data.bestChange,1) : '—';
+      ui.todayBest.innerHTML = `<b>${bs}</b> / 100<br/>最大改善量：<b>+${bc}%</b>`;
+    }catch{
+      ui.todayBest.innerHTML = `<b>—</b> / 100<br/>最大改善量：<b>—</b>`;
+    }
+  })();
+
+  /* =========================================================
+    Handlers
+  ========================================================= */
   ui.btnRecBase.addEventListener('click', () => analyzeAndRender('base'));
   ui.btnRecWork.addEventListener('click', () => analyzeAndRender('work'));
 
@@ -679,11 +1528,36 @@
   ui.btnClearWork.addEventListener('click', () => clearPanel('work'));
   ui.btnClearAll.addEventListener('click', () => clearAll());
 
+  // Try Again：Work を再録音（既存の analyzeAndRender('work') を呼ぶだけ）
+  ui.btnTryAgain.addEventListener('click', () => {
+    if(!(baseMetrics && workMetrics)) return;
+    if(tryCount >= MAX_TRIES) return;
+
+    tryCount += 1;
+    ui.tryCount.textContent = `Try ${tryCount}/${MAX_TRIES}`;
+
+    // Try Again を押したら Work録音を再実行
+    // ※録音処理/解析処理は analyzeAndRender に一任（変更しない）
+    analyzeAndRender('work').then(() => {
+      // 3回到達でボタン無効化（UIのみ）
+      ui.btnTryAgain.disabled = (tryCount >= MAX_TRIES);
+      ui.tryCount.textContent = `Try ${tryCount}/${MAX_TRIES}`;
+    });
+  });
+
+  // Save（既存：数値のみ保存）
   ui.btnSave.addEventListener('click', () => {
     if(!(baseMetrics && workMetrics)) return;
 
-    const pctText = ui.diffPct.textContent.replace('%','');
-    const diffPct = Number(pctText);
+    // 仕事モード変化（+xx%）
+    const { changePct } = computeWorkModeChange();
+
+    // Voice Score
+    const { score, parts } = computeVoiceScore(baseMetrics, workMetrics);
+
+    // 改善テーマ（1つ）
+    const imp = pickOneImprovement(parts);
+
     const entry = {
       ts: Date.now(),
       base: {
@@ -698,8 +1572,9 @@
         f0_std: workMetrics.f0_std,
         f0_range: workMetrics.f0_range
       },
-      diffPct: Number.isFinite(diffPct) ? diffPct : NaN,
-      comment: ui.commentMain.textContent
+      diffPct: Number.isFinite(changePct) ? changePct : NaN,
+      voiceScore: Number.isFinite(score) ? score : NaN,
+      focus: imp?.label || ''
     };
 
     saveHistoryEntry(entry);
@@ -713,9 +1588,6 @@
       wipeHistory();
     }
   });
-
-  // Render history once
-  renderHistory();
 
 })();
 </script>
