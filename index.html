@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Voice Switch Check (No Audio Saved)</title>
+  <style>
+    :root{
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
+      color-scheme: light;
+    }
+    body{ margin:0; background:#f6f7f9; color:#111; }
+    header{ padding:18px 20px 10px; max-width:1200px; margin:0 auto; }
+    h1{ margin:0; font-size:18px; }
+    .note{ margin:8px 0 0; font-size:12px; color:#555; line-height:1.5; }
+
+    /* ===== Layout (PC first) ===== */
+    .wrap{
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 12px 20px 22px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;   /* Baseline | Work */
+      grid-template-rows: auto auto;    /* top row panels + evaluation full width */
+      gap: 14px;
+      align-items: start;
+    }
+    /* Evaluation spans both columns */
+    .evalSpan{ grid-column: 1 / -1; }
+
+    /* Cards */
+    .card{
+      background:#fff; border:1px solid #e6e8ee; border-radius:12px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.03);
+      padding:14px;
+    }
+
+    .titlebar{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; margin-bottom:12px;
+    }
+    .tag{
+      font-size:12px; color:#444; padding:4px 10px;
+      border:1px solid #e6e8ee; border-radius:999px; background:#fafbfc;
+      white-space: nowrap;
+    }
+    .btnrow{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
+    button{
+      appearance:none; border:0; border-radius:10px; padding:10px 12px;
+      background:#111; color:#fff; font-weight:600; font-size:14px;
+      cursor:pointer;
+    }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    .ghost{ background:#fff; color:#111; border:1px solid #e6e8ee; }
+    .small{ font-size:12px; padding:9px 10px; border-radius:10px; }
+
+    /* Panel internal layout */
+    .panelGrid{
+      display:grid;
+      grid-template-columns: 1.25fr 0.95fr; /* waveform | metrics */
+      gap: 12px;
+      align-items: start;
+    }
+
+    canvas{
+      width:100%;
+      height:130px;                 /* bigger for PC */
+      border-radius:10px;
+      background:#0b1220;
+      border:1px solid #1b2a4a;
+      display:block;
+    }
+    .status{ margin-top:8px; font-size:12px; color:#555; }
+
+    .rightCol{ display:flex; flex-direction:column; gap:10px; }
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .metric{
+      border:1px solid #e6e8ee; border-radius:10px; padding:10px;
+      background:#fafbfc;
+      font-size:13px;
+    }
+    .metric .k{ color:#666; font-size:12px; }
+    .metric .v{ font-weight:800; font-size:16px; margin-top:3px; }
+
+    /* Evaluation */
+    .eval{
+      display:flex; gap:14px; align-items:stretch; flex-wrap:nowrap;
+    }
+    .scorebox{
+      flex: 0 0 200px;
+      border:1px solid #e6e8ee; border-radius:12px; padding:14px;
+      background:#fff;
+    }
+    .scorebox .k{ font-size:12px; color:#666; }
+    .scorebox .v{ font-size:34px; font-weight:900; margin-top:6px; }
+    .scorebox .sub{ margin-top:8px; font-size:12px; color:#555; line-height:1.5; }
+
+    .comment{
+      flex: 1;
+      border:1px solid #e6e8ee; border-radius:12px; padding:14px;
+      background:#fff;
+      min-width: 420px;
+    }
+    .comment .k{ font-size:12px; color:#666; }
+    .comment .v{ font-size:15px; font-weight:800; margin-top:8px; line-height:1.6; }
+    .comment .sub{ margin-top:8px; font-size:12px; color:#555; line-height:1.6; }
+
+    details{ margin-top:12px; }
+    summary{ cursor:pointer; color:#333; font-size:13px; }
+    .footrow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .hist{
+      font-size:12px; color:#333; line-height:1.6; margin-top:8px;
+      background:#fafbfc; border:1px solid #e6e8ee; border-radius:10px;
+      padding:10px;
+    }
+
+    /* ===== Responsive fallback ===== */
+    @media (max-width: 980px){
+      .wrap{ grid-template-columns: 1fr; }
+      .evalSpan{ grid-column: 1; }
+      .panelGrid{ grid-template-columns: 1fr; }
+      canvas{ height:110px; }
+      .eval{ flex-wrap:wrap; }
+      .comment{ min-width: 0; }
+      .scorebox{ flex: 1 1 220px; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>音声切り替えセルフチェック（音声は保存しません）</h1>
+  <div class="note">
+    ①平常時→②仕事モードの順で録音（各5秒）。保存するのは数値（RMS / F0中央値 / F0揺れ / 乖離%）のみ。<br/>
+    ※マイクは https または http://localhost で許可されることが多いです（file:// 直開きはNGのことがあります）
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- Baseline -->
+  <section class="card" id="baselineCard">
+    <div class="titlebar">
+      <div class="tag">① 平常時（Baseline）</div>
+      <div class="btnrow">
+        <button id="btnRecBase">5秒録音</button>
+        <button id="btnClearBase" class="ghost small">クリア</button>
+      </div>
+    </div>
+
+    <div class="panelGrid">
+      <div>
+        <canvas id="waveBase" width="1100" height="200" aria-label="baseline waveform"></canvas>
+        <div class="status" id="statusBase">未録音</div>
+        <div class="status">例：「おはようございます。ひでさんです。今日もよろしくお願いします」</div>
+      </div>
+
+      <div class="rightCol">
+        <div class="grid">
+          <div class="metric"><div class="k">RMS（音量）</div><div class="v" id="baseRms">—</div></div>
+          <div class="metric"><div class="k">F0 median（トーン）</div><div class="v" id="baseF0med">—</div></div>
+          <div class="metric"><div class="k">F0 std（抑揚）</div><div class="v" id="baseF0std">—</div></div>
+          <div class="metric"><div class="k">F0 range（メリハリ）</div><div class="v" id="baseF0rng">—</div></div>
+        </div>
+        <div class="status">補足：静かな場所・マイク距離一定（拳1つ）だと安定します。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Work -->
+  <section class="card" id="workCard">
+    <div class="titlebar">
+      <div class="tag">② 仕事モード（Work）</div>
+      <div class="btnrow">
+        <button id="btnRecWork">5秒録音</button>
+        <button id="btnClearWork" class="ghost small">クリア</button>
+      </div>
+    </div>
+
+    <div class="panelGrid">
+      <div>
+        <canvas id="waveWork" width="1100" height="200" aria-label="work waveform"></canvas>
+        <div class="status" id="statusWork">未録音</div>
+        <div class="status">例：「お電話ありがとうございます。本日担当をいたします、ひでさんです」</div>
+      </div>
+
+      <div class="rightCol">
+        <div class="grid">
+          <div class="metric"><div class="k">RMS（音量）</div><div class="v" id="workRms">—</div></div>
+          <div class="metric"><div class="k">F0 median（トーン）</div><div class="v" id="workF0med">—</div></div>
+          <div class="metric"><div class="k">F0 std（抑揚）</div><div class="v" id="workF0std">—</div></div>
+          <div class="metric"><div class="k">F0 range（メリハリ）</div><div class="v" id="workF0rng">—</div></div>
+        </div>
+        <div class="status">補足：声が小さいとF0が拾いにくい場合があります。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Evaluation -->
+  <section class="card evalSpan">
+    <div class="titlebar">
+      <div class="tag">評価</div>
+      <div class="btnrow">
+        <button id="btnSave" class="ghost small" disabled>数値を保存（7日）</button>
+        <button id="btnClearAll" class="ghost small">全クリア</button>
+      </div>
+    </div>
+
+    <div class="eval">
+      <div class="scorebox">
+        <div class="k">乖離割合</div>
+        <div class="v" id="diffPct">—%</div>
+        <div class="sub" id="diffDetail">BaselineとWorkを録音すると表示されます。</div>
+      </div>
+      <div class="comment">
+        <div class="k">コメント</div>
+        <div class="v" id="commentMain">—</div>
+        <div class="sub" id="commentSub"></div>
+
+        <details>
+          <summary>履歴（数値のみ・直近7日）</summary>
+          <div class="footrow">
+            <button id="btnLoadHist" class="ghost small">表示更新</button>
+            <button id="btnWipeHist" class="ghost small">履歴を全削除</button>
+          </div>
+          <div class="hist" id="histArea">（未表示）</div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+  // ====== Security/Policy: no external network, no audio persistence ======
+  // We store ONLY numeric metrics in localStorage.
+
+  const ui = {
+    btnRecBase: document.getElementById('btnRecBase'),
+    btnRecWork: document.getElementById('btnRecWork'),
+    btnClearBase: document.getElementById('btnClearBase'),
+    btnClearWork: document.getElementById('btnClearWork'),
+    btnClearAll: document.getElementById('btnClearAll'),
+    btnSave: document.getElementById('btnSave'),
+    btnLoadHist: document.getElementById('btnLoadHist'),
+    btnWipeHist: document.getElementById('btnWipeHist'),
+
+    statusBase: document.getElementById('statusBase'),
+    statusWork: document.getElementById('statusWork'),
+
+    waveBase: document.getElementById('waveBase'),
+    waveWork: document.getElementById('waveWork'),
+
+    baseRms: document.getElementById('baseRms'),
+    baseF0med: document.getElementById('baseF0med'),
+    baseF0std: document.getElementById('baseF0std'),
+    baseF0rng: document.getElementById('baseF0rng'),
+
+    workRms: document.getElementById('workRms'),
+    workF0med: document.getElementById('workF0med'),
+    workF0std: document.getElementById('workF0std'),
+    workF0rng: document.getElementById('workF0rng'),
+
+    diffPct: document.getElementById('diffPct'),
+    diffDetail: document.getElementById('diffDetail'),
+    commentMain: document.getElementById('commentMain'),
+    commentSub: document.getElementById('commentSub'),
+
+    histArea: document.getElementById('histArea')
+  };
+
+  const HIST_KEY = 'voice_switch_history_v1';
+  const KEEP_DAYS = 7;
+
+  let baseMetrics = null;
+  let workMetrics = null;
+
+  let audioCtx = null;
+  function ensureAudioCtx(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
+
+  function fmt(n, digits=3){
+    if(!Number.isFinite(n)) return '—';
+    return n.toFixed(digits);
+  }
+  function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
+
+  function setBusy(isBusy){
+    ui.btnRecBase.disabled = isBusy;
+    ui.btnRecWork.disabled = isBusy;
+    ui.btnClearBase.disabled = isBusy;
+    ui.btnClearWork.disabled = isBusy;
+    ui.btnClearAll.disabled = isBusy;
+    ui.btnSave.disabled = isBusy || !(baseMetrics && workMetrics);
+  }
+
+  async function recordForSeconds(seconds=5){
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    try{
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if(e.data && e.data.size > 0) chunks.push(e.data); };
+
+      const stopped = new Promise((resolve, reject) => {
+        recorder.onstop = () => resolve();
+        recorder.onerror = (e) => reject(e.error || e);
+      });
+
+      recorder.start();
+      await new Promise(r => setTimeout(r, seconds * 1000));
+      recorder.stop();
+      await stopped;
+
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      const arrayBuf = await blob.arrayBuffer();
+      const ctx = ensureAudioCtx();
+      const audioBuf = await ctx.decodeAudioData(arrayBuf.slice(0));
+
+      return { audioBuf };
+    } finally {
+      stream.getTracks().forEach(t => t.stop());
+    }
+  }
+
+  function drawWaveform(canvas, samples){
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(0,0,w,h);
+
+    ctx.strokeStyle = 'rgba(255,255,255,.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h/2);
+    ctx.lineTo(w, h/2);
+    ctx.stroke();
+
+    const step = Math.max(1, Math.floor(samples.length / w));
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    for(let x=0; x<w; x++){
+      const start = x * step;
+      let min = 1, max = -1;
+      for(let i=0; i<step; i++){
+        const s = samples[start + i];
+        if(s === undefined) break;
+        if(s < min) min = s;
+        if(s > max) max = s;
+      }
+      const y1 = (1 - (max + 1)/2) * h;
+      const y2 = (1 - (min + 1)/2) * h;
+      ctx.moveTo(x + 0.5, y1);
+      ctx.lineTo(x + 0.5, y2);
+    }
+    ctx.stroke();
+  }
+
+  function computeRMS(samples){
+    let sum = 0;
+    for(let i=0; i<samples.length; i++){
+      const s = samples[i];
+      sum += s*s;
+    }
+    return Math.sqrt(sum / samples.length);
+  }
+
+  function estimateF0Series(samples, sampleRate){
+    const frameSize = 2048;
+    const hopSize = 512;
+
+    const fMin = 70;
+    const fMax = 350;
+    const lagMin = Math.floor(sampleRate / fMax);
+    const lagMax = Math.floor(sampleRate / fMin);
+
+    const f0s = [];
+
+    function frameF0(frame){
+      let energy = 0;
+      for(let i=0;i<frame.length;i++) energy += frame[i]*frame[i];
+      energy /= frame.length;
+      if(energy < 1e-5) return null;
+
+      let mean = 0;
+      for(let i=0;i<frame.length;i++) mean += frame[i];
+      mean /= frame.length;
+      for(let i=0;i<frame.length;i++) frame[i] -= mean;
+
+      let bestLag = -1;
+      let bestVal = -Infinity;
+
+      let r0 = 0;
+      for(let i=0;i<frame.length;i++) r0 += frame[i]*frame[i];
+      if(r0 <= 0) return null;
+
+      for(let lag=lagMin; lag<=lagMax; lag++){
+        let r = 0;
+        for(let i=0; i<frame.length - lag; i++){
+          r += frame[i] * frame[i+lag];
+        }
+        r = r / r0;
+
+        if(r > bestVal){
+          bestVal = r;
+          bestLag = lag;
+        }
+      }
+
+      if(bestVal < 0.25 || bestLag < 0) return null;
+
+      const f0 = sampleRate / bestLag;
+      if(!Number.isFinite(f0)) return null;
+      return f0;
+    }
+
+    for(let start=0; start + frameSize <= samples.length; start += hopSize){
+      const frame = new Float32Array(frameSize);
+      frame.set(samples.subarray(start, start+frameSize));
+      const f0 = frameF0(frame);
+      if(f0) f0s.push(f0);
+    }
+
+    return f0s;
+  }
+
+  function stats(arr){
+    if(!arr || arr.length === 0) return { median: NaN, mean: NaN, std: NaN, min: NaN, max: NaN, range: NaN };
+    const a = Array.from(arr).sort((x,y)=>x-y);
+    const n = a.length;
+    const median = (n%2===1) ? a[(n-1)/2] : (a[n/2-1]+a[n/2])/2;
+    let sum=0;
+    for(const v of a) sum+=v;
+    const mean = sum/n;
+    let varSum=0;
+    for(const v of a) varSum += (v-mean)*(v-mean);
+    const std = Math.sqrt(varSum/n);
+    const min = a[0], max = a[n-1];
+    const range = max - min;
+    return { median, mean, std, min, max, range };
+  }
+
+  async function analyzeAndRender(kind){
+    setBusy(true);
+
+    const statusEl = (kind === 'base') ? ui.statusBase : ui.statusWork;
+    statusEl.textContent = '録音中…（5秒）';
+
+    try{
+      const { audioBuf } = await recordForSeconds(5);
+      statusEl.textContent = '解析中…';
+
+      const samples = audioBuf.getChannelData(0);
+      const sr = audioBuf.sampleRate;
+
+      const canvas = (kind === 'base') ? ui.waveBase : ui.waveWork;
+      drawWaveform(canvas, samples);
+
+      const rms = computeRMS(samples);
+      const f0series = estimateF0Series(samples, sr);
+      const f0s = stats(f0series);
+
+      const metrics = {
+        rms,
+        f0_median: f0s.median,
+        f0_std: f0s.std,
+        f0_range: f0s.range,
+        sampleRate: sr,
+        voicedFrames: f0series.length
+      };
+
+      if(kind === 'base'){
+        baseMetrics = metrics;
+        ui.baseRms.textContent = fmt(metrics.rms, 4);
+        ui.baseF0med.textContent = Number.isFinite(metrics.f0_median) ? `${fmt(metrics.f0_median, 1)} Hz` : '—';
+        ui.baseF0std.textContent = Number.isFinite(metrics.f0_std) ? `${fmt(metrics.f0_std, 1)} Hz` : '—';
+        ui.baseF0rng.textContent = Number.isFinite(metrics.f0_range) ? `${fmt(metrics.f0_range, 1)} Hz` : '—';
+        statusEl.textContent = `完了（有声音フレーム: ${metrics.voicedFrames}）`;
+      } else {
+        workMetrics = metrics;
+        ui.workRms.textContent = fmt(metrics.rms, 4);
+        ui.workF0med.textContent = Number.isFinite(metrics.f0_median) ? `${fmt(metrics.f0_median, 1)} Hz` : '—';
+        ui.workF0std.textContent = Number.isFinite(metrics.f0_std) ? `${fmt(metrics.f0_std, 1)} Hz` : '—';
+        ui.workF0rng.textContent = Number.isFinite(metrics.f0_range) ? `${fmt(metrics.f0_range, 1)} Hz` : '—';
+        statusEl.textContent = `完了（有声音フレーム: ${metrics.voicedFrames}）`;
+      }
+
+      evaluateIfReady();
+    } catch(err){
+      console.error(err);
+      statusEl.textContent = 'エラー：マイク許可 or 録音に失敗しました';
+      alert('録音/解析に失敗しました。マイク許可がONか、https/localhostで開いているか確認してください。');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function evaluateIfReady(){
+    if(!(baseMetrics && workMetrics)){
+      ui.diffPct.textContent = '—%';
+      ui.commentMain.textContent = '—';
+      ui.commentSub.textContent = '';
+      ui.diffDetail.textContent = 'BaselineとWorkを録音すると表示されます。';
+      ui.btnSave.disabled = true;
+      return;
+    }
+
+    const eps = 1e-6;
+
+    const loud = Math.abs(workMetrics.rms - baseMetrics.rms) / (baseMetrics.rms + eps);
+    const pitch = (Number.isFinite(baseMetrics.f0_median) && Number.isFinite(workMetrics.f0_median))
+      ? Math.abs(workMetrics.f0_median - baseMetrics.f0_median) / (baseMetrics.f0_median + eps)
+      : 0;
+
+    const into = (Number.isFinite(baseMetrics.f0_std) && Number.isFinite(workMetrics.f0_std))
+      ? Math.abs(workMetrics.f0_std - baseMetrics.f0_std) / (baseMetrics.f0_std + 5)
+      : 0;
+
+    const divergence = 0.4*loud + 0.4*pitch + 0.2*into;
+    const pct = clamp(divergence * 100, 0, 100);
+
+    ui.diffPct.textContent = `${fmt(pct, 1)}%`;
+
+    const d1 = `音量差 ${fmt(loud*100, 1)}%`;
+    const d2 = `トーン差 ${fmt(pitch*100, 1)}%`;
+    const d3 = `抑揚差 ${fmt(into*100, 1)}%`;
+    ui.diffDetail.textContent = `${d1} / ${d2} / ${d3}`;
+
+    let main = '';
+    let sub = '';
+
+    if(pct <= 20){
+      main = '切り替えが弱めです。本日は第一声を意識していきましょう。';
+      sub = suggestOne(loud, pitch, into, 'up');
+    } else if(pct >= 50){
+      main = '今日もイイ挨拶ですね。その調子でいきましょう。';
+      sub = suggestOne(loud, pitch, into, 'keep');
+    } else {
+      main = 'まずまずです。あと一段だけ明るさ（張り or 抑揚）を足すとさらに良いです。';
+      sub = suggestOne(loud, pitch, into, 'up');
+    }
+
+    ui.commentMain.textContent = main;
+    ui.commentSub.textContent = sub;
+
+    ui.btnSave.disabled = false;
+  }
+
+  function suggestOne(loud, pitch, into, mode){
+    const items = [
+      { key:'音量（張り）', val:loud },
+      { key:'トーン（高さ）', val:pitch },
+      { key:'抑揚（揺れ）', val:into }
+    ];
+
+    if(mode === 'keep'){
+      items.sort((a,b)=>b.val - a.val);
+      const top = items[0];
+      if(top.val < 0.08) return '※今回は差が小さめですが、安定した発話ができています。';
+      return `良かった点：${top.key}の切り替えが出ています。`;
+    } else {
+      items.sort((a,b)=>a.val - b.val);
+      const low = items[0];
+      if(low.key.includes('音量')) return '提案：語頭を少しだけ強めに（息多め＋口を開く）すると第一声が立ちます。';
+      if(low.key.includes('トーン')) return '提案：語頭のピッチを少し上げる意識で、明るさが出ます。';
+      return '提案：句読点でほんの少し上下を付けると、抑揚が自然に出ます。';
+    }
+  }
+
+  function loadHistory(){
+    try{
+      const raw = localStorage.getItem(HIST_KEY);
+      if(!raw) return [];
+      const arr = JSON.parse(raw);
+      if(!Array.isArray(arr)) return [];
+      return arr;
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistoryEntry(entry){
+    const now = Date.now();
+    const cutoff = now - KEEP_DAYS*24*60*60*1000;
+
+    const hist = loadHistory()
+      .filter(e => typeof e?.ts === 'number' && e.ts >= cutoff);
+
+    hist.unshift(entry);
+    while(hist.length > 30) hist.pop();
+
+    localStorage.setItem(HIST_KEY, JSON.stringify(hist));
+  }
+
+  function renderHistory(){
+    const hist = loadHistory();
+    if(hist.length === 0){
+      ui.histArea.textContent = '履歴なし';
+      return;
+    }
+    const lines = hist.map(e => {
+      const dt = new Date(e.ts);
+      const stamp = dt.toLocaleString('ja-JP', { hour12:false });
+      return [
+        `• ${stamp} 乖離 ${fmt(e.diffPct,1)}%`,
+        `  Baseline: RMS ${fmt(e.base.rms,4)}, F0med ${fmt(e.base.f0_median,1)}Hz, F0std ${fmt(e.base.f0_std,1)}Hz`,
+        `  Work:     RMS ${fmt(e.work.rms,4)}, F0med ${fmt(e.work.f0_median,1)}Hz, F0std ${fmt(e.work.f0_std,1)}Hz`,
+        `  コメント: ${e.comment || ''}`
+      ].join('\n');
+    }).join('\n\n');
+
+    ui.histArea.textContent = lines;
+    ui.histArea.style.whiteSpace = 'pre-wrap';
+  }
+
+  function wipeHistory(){
+    localStorage.removeItem(HIST_KEY);
+    renderHistory();
+  }
+
+  function clearCanvas(canvas){
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  function clearPanel(kind){
+    if(kind === 'base'){
+      baseMetrics = null;
+      ui.baseRms.textContent = '—';
+      ui.baseF0med.textContent = '—';
+      ui.baseF0std.textContent = '—';
+      ui.baseF0rng.textContent = '—';
+      ui.statusBase.textContent = '未録音';
+      clearCanvas(ui.waveBase);
+    } else {
+      workMetrics = null;
+      ui.workRms.textContent = '—';
+      ui.workF0med.textContent = '—';
+      ui.workF0std.textContent = '—';
+      ui.workF0rng.textContent = '—';
+      ui.statusWork.textContent = '未録音';
+      clearCanvas(ui.waveWork);
+    }
+    evaluateIfReady();
+  }
+
+  function clearAll(){
+    clearPanel('base');
+    clearPanel('work');
+    ui.diffPct.textContent = '—%';
+    ui.diffDetail.textContent = 'BaselineとWorkを録音すると表示されます。';
+    ui.commentMain.textContent = '—';
+    ui.commentSub.textContent = '';
+  }
+
+  // Init canvas backgrounds
+  clearCanvas(ui.waveBase);
+  clearCanvas(ui.waveWork);
+
+  // Handlers
+  ui.btnRecBase.addEventListener('click', () => analyzeAndRender('base'));
+  ui.btnRecWork.addEventListener('click', () => analyzeAndRender('work'));
+
+  ui.btnClearBase.addEventListener('click', () => clearPanel('base'));
+  ui.btnClearWork.addEventListener('click', () => clearPanel('work'));
+  ui.btnClearAll.addEventListener('click', () => clearAll());
+
+  ui.btnSave.addEventListener('click', () => {
+    if(!(baseMetrics && workMetrics)) return;
+
+    const pctText = ui.diffPct.textContent.replace('%','');
+    const diffPct = Number(pctText);
+    const entry = {
+      ts: Date.now(),
+      base: {
+        rms: baseMetrics.rms,
+        f0_median: baseMetrics.f0_median,
+        f0_std: baseMetrics.f0_std,
+        f0_range: baseMetrics.f0_range
+      },
+      work: {
+        rms: workMetrics.rms,
+        f0_median: workMetrics.f0_median,
+        f0_std: workMetrics.f0_std,
+        f0_range: workMetrics.f0_range
+      },
+      diffPct: Number.isFinite(diffPct) ? diffPct : NaN,
+      comment: ui.commentMain.textContent
+    };
+
+    saveHistoryEntry(entry);
+    renderHistory();
+    alert('保存しました（数値のみ）。');
+  });
+
+  ui.btnLoadHist.addEventListener('click', () => renderHistory());
+  ui.btnWipeHist.addEventListener('click', () => {
+    if(confirm('履歴（数値のみ）をすべて削除しますか？')){
+      wipeHistory();
+    }
+  });
+
+  // Render history once
+  renderHistory();
+
+})();
+</script>
+</body>
+</html>
